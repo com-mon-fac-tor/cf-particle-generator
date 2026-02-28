@@ -274,7 +274,7 @@
 </div>
 
 <script type="module">
-import { generatePoints, generateConnections, renderFrame, projectPoints, hexToRGB, parseSVGFile, focalLengthToPerspD } from './particle-engine.js';
+import { generatePoints, generateConnections, renderFrame, projectPoints, hexToRGB, parseSVGFile, focalLengthToPerspD, initVoronoiSamples, generateVoronoiPoints, initFloatPhases, applyFloat } from './particle-engine.js';
 
 // ── State ──────────────────────────────────────────────────────────
 const state = {
@@ -335,109 +335,20 @@ const state = {
   points: [],
 };
 
-// ── Voronoi Generator ──────────────────────────────────────────────
+// ── Voronoi & Float (delegated to engine) ─────────────────────────
 
 let _voronoiSamples = [];
-
-function initVoronoiSamples() {
-  const needed = Math.max(state.density * 6, 8000);
-  const gridRes = Math.ceil(Math.sqrt(needed));
-  const samples = [];
-  for (let xi = 0; xi < gridRes; xi++) {
-    for (let yi = 0; yi < gridRes; yi++) {
-      samples.push({
-        x: ((xi + 0.5 + (Math.random() - 0.5) * 0.85) / gridRes) * 2 - 1,
-        y: ((yi + 0.5 + (Math.random() - 0.5) * 0.85) / gridRes) * 2 - 1,
-      });
-    }
-  }
-  // Shuffle so filtering always picks a spatially uniform subset
-  for (let i = samples.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [samples[i], samples[j]] = [samples[j], samples[i]];
-  }
-  _voronoiSamples = samples;
-}
-
-function generateVoronoiPoints(t) {
-  const count = state.density;
-  const mw = state.voronoiMembraneWidth;
-  const vari = state.voronoiVariability;
-  const numSeeds = Math.max(3, state.voronoiCells);
-
-  // Golden-ratio spiral seed layout with per-seed animation
-  const seeds = [];
-  for (let i = 0; i < numSeeds; i++) {
-    const theta = i * 2.399963; // golden angle
-    const r0 = Math.sqrt((i + 0.5) / numSeeds) * 0.75;
-    const cx = r0 * Math.cos(theta);
-    const cy = r0 * Math.sin(theta);
-    const orbitR = 0.08 + ((i * 0.137) % 1) * 0.12;
-    const freq = state.voronoiSpeed * (0.4 + ((i * 0.31) % 1) * vari * 0.8);
-    const phase = i * 1.618;
-    seeds.push({
-      x: cx + orbitR * Math.cos(t * freq + phase),
-      y: cy + orbitR * Math.sin(t * freq * 0.71 + phase + 1.2),
-    });
-  }
-
-  // Filter precomputed samples to those near Voronoi edges
-  const result = [];
-  for (let si = 0; si < _voronoiSamples.length && result.length < count; si++) {
-    const s = _voronoiSamples[si];
-    let d1 = Infinity, d2 = Infinity;
-    for (const seed of seeds) {
-      const dx = s.x - seed.x, dy = s.y - seed.y;
-      const d = Math.sqrt(dx * dx + dy * dy);
-      if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) { d2 = d; }
-    }
-    if (d2 - d1 < mw) result.push({ x: s.x, y: s.y, z: 0 });
-  }
-  return result;
-}
-
-// ── Float ──────────────────────────────────────────────────────────
-
 let _floatPhases = [];
-
-function initFloatPhases() {
-  _floatPhases = state.points.map(() => ({
-    px: Math.random() * Math.PI * 2,
-    py: Math.random() * Math.PI * 2,
-    pz: Math.random() * Math.PI * 2,
-    sx: Math.random() * 2 - 1, // variability seed x
-    sy: Math.random() * 2 - 1, // variability seed y
-    sz: Math.random() * 2 - 1, // variability seed z
-  }));
-}
-
-function getFloatPoints() {
-  const t = performance.now() * 0.001;
-  const base = state.floatSpeed;
-  const vari = state.floatVariability;
-  const r = state.floatRadius;
-  return state.points.map((p, i) => {
-    const ph = _floatPhases[i] || { px: 0, py: 0, pz: 0, sx: 0, sy: 0, sz: 0 };
-    const fx = base * (1 + ph.sx * vari);
-    const fy = base * (1 + ph.sy * vari);
-    const fz = base * (1 + ph.sz * vari);
-    return { ...p,
-      x: p.x + Math.sin(t * fx + ph.px) * r,
-      y: p.y + Math.cos(t * fy + ph.py) * r,
-      z: p.z + Math.sin(t * fz + ph.pz) * r,
-    };
-  });
-}
 
 function regeneratePoints() {
   if (state.shapeType === 'voronoi') {
-    initVoronoiSamples();
-    state.points = generateVoronoiPoints(0);
+    _voronoiSamples = initVoronoiSamples(state.density);
+    state.points = generateVoronoiPoints(_voronoiSamples, state, 0);
   } else {
     state.points = generatePoints(state);
   }
   state.connectionData = generateConnections(state.points, state);
-  initFloatPhases();
+  _floatPhases = initFloatPhases(state.points.length);
 }
 
 // ── Renderer ───────────────────────────────────────────────────────
@@ -458,11 +369,12 @@ let _pixelCanvas = null;
 
 function render() {
   const { w, h } = getLogicalSize();
+  const t = performance.now() * 0.001;
   let points;
   if (state.shapeType === 'voronoi') {
-    points = generateVoronoiPoints(performance.now() * 0.001);
+    points = generateVoronoiPoints(_voronoiSamples, state, t);
   } else {
-    points = state.float ? getFloatPoints() : state.points;
+    points = state.float ? applyFloat(state.points, _floatPhases, state, t) : state.points;
   }
   const blockSize = state.pixelate;
   if (blockSize > 1) {
@@ -721,13 +633,28 @@ function generateEmbedCode() {
     attrs.push(`extrude-depth="${state.extrudeDepth}"`);
   }
   if (state.snapToGrid) attrs.push('snap-to-grid');
+  if (state.shapeType === 'voronoi') {
+    if (state.voronoiCells !== 12) attrs.push(`voronoi-cells="${state.voronoiCells}"`);
+    if (state.voronoiMembraneWidth !== 0.05) attrs.push(`voronoi-membrane-width="${state.voronoiMembraneWidth}"`);
+    if (state.voronoiSpeed !== 0.5) attrs.push(`voronoi-speed="${state.voronoiSpeed}"`);
+    if (state.voronoiVariability !== 0.5) attrs.push(`voronoi-variability="${state.voronoiVariability}"`);
+  }
 
   // Appearance
   attrs.push(`color="${state.color}"`);
   if (state.bgColor !== '#0a0a0a') attrs.push(`bg="${state.bgColor}"`);
   if (state.squareSize !== 3) attrs.push(`size="${state.squareSize}"`);
+  if (state.pixelate > 0) attrs.push(`pixelate="${state.pixelate}"`);
   if (state.depthOpacity) attrs.push('depth-opacity');
   if (state.depthSizing) attrs.push('depth-sizing');
+
+  // Particles
+  if (state.float) {
+    attrs.push('float');
+    if (state.floatRadius !== 0.1) attrs.push(`float-radius="${state.floatRadius}"`);
+    if (state.floatSpeed !== 1.0) attrs.push(`float-speed="${state.floatSpeed}"`);
+    if (state.floatVariability !== 0.5) attrs.push(`float-variability="${state.floatVariability}"`);
+  }
 
   // Camera
   if (state.zoom !== 1.0) attrs.push(`zoom="${state.zoom}"`);

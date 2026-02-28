@@ -400,6 +400,96 @@ function generateSVGExtrude(n, config) {
   return points;
 }
 
+// ── Voronoi Generator ──────────────────────────────────────────────
+
+export function initVoronoiSamples(density) {
+  const needed = Math.max(density * 6, 8000);
+  const gridRes = Math.ceil(Math.sqrt(needed));
+  const samples = [];
+  for (let xi = 0; xi < gridRes; xi++) {
+    for (let yi = 0; yi < gridRes; yi++) {
+      samples.push({
+        x: ((xi + 0.5 + (Math.random() - 0.5) * 0.85) / gridRes) * 2 - 1,
+        y: ((yi + 0.5 + (Math.random() - 0.5) * 0.85) / gridRes) * 2 - 1,
+      });
+    }
+  }
+  for (let i = samples.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [samples[i], samples[j]] = [samples[j], samples[i]];
+  }
+  return samples;
+}
+
+export function generateVoronoiPoints(samples, config, t) {
+  const count = config.density || 1500;
+  const mw = config.voronoiMembraneWidth || 0.05;
+  const vari = config.voronoiVariability || 0.5;
+  const numSeeds = Math.max(3, config.voronoiCells || 12);
+
+  const seeds = [];
+  for (let i = 0; i < numSeeds; i++) {
+    const theta = i * 2.399963;
+    const r0 = Math.sqrt((i + 0.5) / numSeeds) * 0.75;
+    const cx = r0 * Math.cos(theta);
+    const cy = r0 * Math.sin(theta);
+    const orbitR = 0.08 + ((i * 0.137) % 1) * 0.12;
+    const freq = (config.voronoiSpeed || 0.5) * (0.4 + ((i * 0.31) % 1) * vari * 0.8);
+    const phase = i * 1.618;
+    seeds.push({
+      x: cx + orbitR * Math.cos(t * freq + phase),
+      y: cy + orbitR * Math.sin(t * freq * 0.71 + phase + 1.2),
+    });
+  }
+
+  const result = [];
+  for (let si = 0; si < samples.length && result.length < count; si++) {
+    const s = samples[si];
+    let d1 = Infinity, d2 = Infinity;
+    for (const seed of seeds) {
+      const dx = s.x - seed.x, dy = s.y - seed.y;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) { d2 = d; }
+    }
+    if (d2 - d1 < mw) result.push({ x: s.x, y: s.y, z: 0 });
+  }
+  return result;
+}
+
+// ── Float Animation ──────────────────────────────────────────────
+
+export function initFloatPhases(count) {
+  const phases = [];
+  for (let i = 0; i < count; i++) {
+    phases.push({
+      px: Math.random() * Math.PI * 2,
+      py: Math.random() * Math.PI * 2,
+      pz: Math.random() * Math.PI * 2,
+      sx: Math.random() * 2 - 1,
+      sy: Math.random() * 2 - 1,
+      sz: Math.random() * 2 - 1,
+    });
+  }
+  return phases;
+}
+
+export function applyFloat(points, phases, config, t) {
+  const base = config.floatSpeed || 1.0;
+  const vari = config.floatVariability || 0.5;
+  const r = config.floatRadius || 0.1;
+  return points.map((p, i) => {
+    const ph = phases[i] || { px: 0, py: 0, pz: 0, sx: 0, sy: 0, sz: 0 };
+    const fx = base * (1 + ph.sx * vari);
+    const fy = base * (1 + ph.sy * vari);
+    const fz = base * (1 + ph.sz * vari);
+    return {
+      x: p.x + Math.sin(t * fx + ph.px) * r,
+      y: p.y + Math.cos(t * fy + ph.py) * r,
+      z: p.z + Math.sin(t * fz + ph.pz) * r,
+    };
+  });
+}
+
 // ── Generators Map ─────────────────────────────────────────────────
 
 export const generators = {

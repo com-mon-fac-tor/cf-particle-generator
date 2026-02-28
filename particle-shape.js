@@ -5,7 +5,7 @@
 //   <script type="module" src="particle-shape.js"></script>
 //   <particle-shape shape="sphere" density="2000" auto-rotate></particle-shape>
 
-import { generators, generatePoints, generateConnections, renderFrame } from './particle-engine.js';
+import { generatePoints, generateConnections, renderFrame, initVoronoiSamples, generateVoronoiPoints, initFloatPhases, applyFloat } from './particle-engine.js';
 
 class ParticleShape extends HTMLElement {
 
@@ -23,7 +23,10 @@ class ParticleShape extends HTMLElement {
       'hub-placement', 'hub-visible', 'hub-size',
       'connection-depth-opacity',
       'connection-distribution', 'connection-spread', 'connection-focus',
-      'highlight-connected', 'zoom',
+      'highlight-connected', 'non-connected-color', 'non-connected-opacity',
+      'zoom', 'pixelate',
+      'float', 'float-radius', 'float-speed', 'float-variability',
+      'voronoi-cells', 'voronoi-membrane-width', 'voronoi-speed', 'voronoi-variability',
     ];
   }
 
@@ -69,9 +72,22 @@ class ParticleShape extends HTMLElement {
       hubVisible: true,
       hubSize: 6,
       connectionDepthOpacity: true,
+      nonConnectedColor: '#404040',
+      nonConnectedOpacity: 0.4,
       connectionData: { hubs: [], connections: [] },
+      pixelate: 0,
+      float: false,
+      floatRadius: 0.1,
+      floatSpeed: 1.0,
+      floatVariability: 0.5,
+      voronoiCells: 12,
+      voronoiMembraneWidth: 0.05,
+      voronoiSpeed: 0.5,
+      voronoiVariability: 0.5,
     };
     this._points = [];
+    this._voronoiSamples = [];
+    this._floatPhases = [];
     this._animId = null;
     this._isDragging = false;
     this._lastMouseX = 0;
@@ -149,7 +165,7 @@ class ParticleShape extends HTMLElement {
     this._applyAttribute(name, newVal);
 
     // Regenerate points for shape-affecting attributes
-    const regenerateAttrs = ['shape', 'density', 'randomness', 'spiral-arms', 'extrude-depth', 'snap-to-grid', 'connections', 'hubs', 'connections-per-hub', 'hub-placement', 'connection-distribution', 'connection-spread', 'connection-focus'];
+    const regenerateAttrs = ['shape', 'density', 'randomness', 'spiral-arms', 'extrude-depth', 'snap-to-grid', 'connections', 'hubs', 'connections-per-hub', 'hub-placement', 'connection-distribution', 'connection-spread', 'connection-focus', 'voronoi-cells', 'float'];
     if (regenerateAttrs.includes(name)) {
       this._regenerate();
     }
@@ -201,7 +217,18 @@ class ParticleShape extends HTMLElement {
       case 'connection-spread':        c.connectionSpread = parseFloat(value) ?? 0.5; break;
       case 'connection-focus':         c.connectionFocus = parseFloat(value) ?? 0.5; break;
       case 'highlight-connected':      c.highlightConnected = value !== 'false' && value !== null; break;
+      case 'non-connected-color':      c.nonConnectedColor = value || '#404040'; break;
+      case 'non-connected-opacity':    c.nonConnectedOpacity = parseFloat(value) ?? 0.4; break;
       case 'zoom':                     c.zoom = parseFloat(value) || 1.0; break;
+      case 'pixelate':                 c.pixelate = parseInt(value, 10) || 0; break;
+      case 'float':                    c.float = value !== 'false' && value !== null; break;
+      case 'float-radius':             c.floatRadius = parseFloat(value) || 0.1; break;
+      case 'float-speed':              c.floatSpeed = parseFloat(value) || 1.0; break;
+      case 'float-variability':        c.floatVariability = parseFloat(value) ?? 0.5; break;
+      case 'voronoi-cells':            c.voronoiCells = parseInt(value, 10) || 12; break;
+      case 'voronoi-membrane-width':   c.voronoiMembraneWidth = parseFloat(value) || 0.05; break;
+      case 'voronoi-speed':            c.voronoiSpeed = parseFloat(value) ?? 0.5; break;
+      case 'voronoi-variability':      c.voronoiVariability = parseFloat(value) ?? 0.5; break;
     }
   }
 
@@ -245,8 +272,14 @@ class ParticleShape extends HTMLElement {
   // ── Animation ─────────────────────────────────────────────────────
 
   _regenerate() {
-    this._points = generatePoints(this._config);
+    if (this._config.shapeType === 'voronoi') {
+      this._voronoiSamples = initVoronoiSamples(this._config.density);
+      this._points = generateVoronoiPoints(this._voronoiSamples, this._config, 0);
+    } else {
+      this._points = generatePoints(this._config);
+    }
     this._config.connectionData = generateConnections(this._points, this._config);
+    this._floatPhases = initFloatPhases(this._points.length);
   }
 
   _startAnimation() {
@@ -255,7 +288,30 @@ class ParticleShape extends HTMLElement {
         this._config.rotY += this._config.rotSpeed;
       }
       if (this._ctx && this._logicalW > 0) {
-        renderFrame(this._ctx, this._logicalW, this._logicalH, this._points, this._config);
+        const t = performance.now() * 0.001;
+        let points;
+        if (this._config.shapeType === 'voronoi') {
+          points = generateVoronoiPoints(this._voronoiSamples, this._config, t);
+        } else if (this._config.float && this._floatPhases.length > 0) {
+          points = applyFloat(this._points, this._floatPhases, this._config, t);
+        } else {
+          points = this._points;
+        }
+
+        const blockSize = this._config.pixelate;
+        if (blockSize > 1) {
+          if (!this._pixelCanvas) this._pixelCanvas = document.createElement('canvas');
+          const pw = Math.max(1, Math.round(this._logicalW / blockSize));
+          const ph = Math.max(1, Math.round(this._logicalH / blockSize));
+          this._pixelCanvas.width = pw;
+          this._pixelCanvas.height = ph;
+          renderFrame(this._pixelCanvas.getContext('2d'), pw, ph, points, this._config);
+          this._ctx.imageSmoothingEnabled = false;
+          this._ctx.drawImage(this._pixelCanvas, 0, 0, this._logicalW, this._logicalH);
+        } else {
+          this._ctx.imageSmoothingEnabled = true;
+          renderFrame(this._ctx, this._logicalW, this._logicalH, points, this._config);
+        }
       }
       this._animId = requestAnimationFrame(tick);
     };

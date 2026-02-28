@@ -213,6 +213,96 @@
     return points.slice(0, n);
   }
 
+  // ── Voronoi Generator ────────────────────────────────────────────
+
+  function initVoronoiSamples(density) {
+    const needed = Math.max(density * 6, 8000);
+    const gridRes = Math.ceil(Math.sqrt(needed));
+    const samples = [];
+    for (let xi = 0; xi < gridRes; xi++) {
+      for (let yi = 0; yi < gridRes; yi++) {
+        samples.push({
+          x: ((xi + 0.5 + (Math.random() - 0.5) * 0.85) / gridRes) * 2 - 1,
+          y: ((yi + 0.5 + (Math.random() - 0.5) * 0.85) / gridRes) * 2 - 1,
+        });
+      }
+    }
+    for (let i = samples.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [samples[i], samples[j]] = [samples[j], samples[i]];
+    }
+    return samples;
+  }
+
+  function generateVoronoiPoints(samples, config, t) {
+    const count = config.density || 1500;
+    const mw = config.voronoiMembraneWidth || 0.05;
+    const vari = config.voronoiVariability || 0.5;
+    const numSeeds = Math.max(3, config.voronoiCells || 12);
+
+    const seeds = [];
+    for (let i = 0; i < numSeeds; i++) {
+      const theta = i * 2.399963;
+      const r0 = Math.sqrt((i + 0.5) / numSeeds) * 0.75;
+      const cx = r0 * Math.cos(theta);
+      const cy = r0 * Math.sin(theta);
+      const orbitR = 0.08 + ((i * 0.137) % 1) * 0.12;
+      const freq = (config.voronoiSpeed || 0.5) * (0.4 + ((i * 0.31) % 1) * vari * 0.8);
+      const phase = i * 1.618;
+      seeds.push({
+        x: cx + orbitR * Math.cos(t * freq + phase),
+        y: cy + orbitR * Math.sin(t * freq * 0.71 + phase + 1.2),
+      });
+    }
+
+    const result = [];
+    for (let si = 0; si < samples.length && result.length < count; si++) {
+      const s = samples[si];
+      let d1 = Infinity, d2 = Infinity;
+      for (const seed of seeds) {
+        const dx = s.x - seed.x, dy = s.y - seed.y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) { d2 = d; }
+      }
+      if (d2 - d1 < mw) result.push({ x: s.x, y: s.y, z: 0 });
+    }
+    return result;
+  }
+
+  // ── Float Animation ────────────────────────────────────────────
+
+  function initFloatPhases(count) {
+    const phases = [];
+    for (let i = 0; i < count; i++) {
+      phases.push({
+        px: Math.random() * Math.PI * 2,
+        py: Math.random() * Math.PI * 2,
+        pz: Math.random() * Math.PI * 2,
+        sx: Math.random() * 2 - 1,
+        sy: Math.random() * 2 - 1,
+        sz: Math.random() * 2 - 1,
+      });
+    }
+    return phases;
+  }
+
+  function applyFloat(points, phases, config, t) {
+    const base = config.floatSpeed || 1.0;
+    const vari = config.floatVariability || 0.5;
+    const r = config.floatRadius || 0.1;
+    return points.map((p, i) => {
+      const ph = phases[i] || { px: 0, py: 0, pz: 0, sx: 0, sy: 0, sz: 0 };
+      const fx = base * (1 + ph.sx * vari);
+      const fy = base * (1 + ph.sy * vari);
+      const fz = base * (1 + ph.sz * vari);
+      return {
+        x: p.x + Math.sin(t * fx + ph.px) * r,
+        y: p.y + Math.cos(t * fy + ph.py) * r,
+        z: p.z + Math.sin(t * fz + ph.pz) * r,
+      };
+    });
+  }
+
   const generators = {
     sphere: generateSphere,
     cube: generateCube,
@@ -416,7 +506,7 @@
       let x2 = x1 * cosC - y1 * sinC;
       let y2 = x1 * sinC + y1 * cosC;
 
-      const scale = perspD / (perspD + z2);
+      const scale = Number.isFinite(perspD) ? perspD / (perspD + z2) : 1;
       result[i] = {
         sx: cx + x2 * scale * worldScale,
         sy: cy + y2 * scale * worldScale,
@@ -470,9 +560,7 @@
       }
     }
 
-    const dimR = Math.round(cr * 0.25);
-    const dimG = Math.round(cg * 0.25);
-    const dimB = Math.round(cb * 0.25);
+    const [ncr, ncg, ncb] = hexToRGB(config.nonConnectedColor || '#404040');
 
     // Draw connections (before sort so indices are intact, lines behind squares)
     if (connData && connData.hubs.length > 0 && connData.connections.length > 0) {
@@ -535,8 +623,9 @@
         : 0.85;
 
       if (connectedSet && !connectedSet.has(p.origIdx)) {
-        const dimAlpha = alpha * 0.4;
-        ctx.fillStyle = `rgba(${dimR},${dimG},${dimB},${dimAlpha})`;
+        const opacityMult = config.nonConnectedOpacity != null ? config.nonConnectedOpacity : 0.4;
+        const dimAlpha = alpha * opacityMult;
+        ctx.fillStyle = `rgba(${ncr},${ncg},${ncb},${dimAlpha})`;
       } else {
         ctx.fillStyle = `rgba(${cr},${cg},${cb},${alpha})`;
       }
@@ -564,7 +653,10 @@
         'hub-placement', 'hub-visible', 'hub-size',
         'connection-depth-opacity',
         'connection-distribution', 'connection-spread', 'connection-focus',
-        'highlight-connected', 'zoom',
+        'highlight-connected', 'non-connected-color', 'non-connected-opacity',
+        'zoom', 'pixelate',
+        'float', 'float-radius', 'float-speed', 'float-variability',
+        'voronoi-cells', 'voronoi-membrane-width', 'voronoi-speed', 'voronoi-variability',
       ];
     }
 
@@ -609,9 +701,22 @@
         hubVisible: true,
         hubSize: 6,
         connectionDepthOpacity: true,
+        nonConnectedColor: '#404040',
+        nonConnectedOpacity: 0.4,
         connectionData: { hubs: [], connections: [] },
+        pixelate: 0,
+        float: false,
+        floatRadius: 0.1,
+        floatSpeed: 1.0,
+        floatVariability: 0.5,
+        voronoiCells: 12,
+        voronoiMembraneWidth: 0.05,
+        voronoiSpeed: 0.5,
+        voronoiVariability: 0.5,
       };
       this._points = [];
+      this._voronoiSamples = [];
+      this._floatPhases = [];
       this._animId = null;
       this._isDragging = false;
       this._lastMouseX = 0;
@@ -683,7 +788,7 @@
       if (oldVal === newVal) return;
       this._applyAttribute(name, newVal);
 
-      const regenerateAttrs = ['shape', 'density', 'randomness', 'spiral-arms', 'extrude-depth', 'snap-to-grid', 'connections', 'hubs', 'connections-per-hub', 'hub-placement', 'connection-distribution', 'connection-spread', 'connection-focus'];
+      const regenerateAttrs = ['shape', 'density', 'randomness', 'spiral-arms', 'extrude-depth', 'snap-to-grid', 'connections', 'hubs', 'connections-per-hub', 'hub-placement', 'connection-distribution', 'connection-spread', 'connection-focus', 'voronoi-cells', 'float'];
       if (regenerateAttrs.includes(name)) {
         this._regenerate();
       }
@@ -735,7 +840,18 @@
         case 'connection-spread':        c.connectionSpread = parseFloat(value) ?? 0.5; break;
         case 'connection-focus':         c.connectionFocus = parseFloat(value) ?? 0.5; break;
         case 'highlight-connected':      c.highlightConnected = value !== 'false' && value !== null; break;
+        case 'non-connected-color':      c.nonConnectedColor = value || '#404040'; break;
+        case 'non-connected-opacity':    c.nonConnectedOpacity = parseFloat(value) ?? 0.4; break;
         case 'zoom':                     c.zoom = parseFloat(value) || 1.0; break;
+        case 'pixelate':                 c.pixelate = parseInt(value, 10) || 0; break;
+        case 'float':                    c.float = value !== 'false' && value !== null; break;
+        case 'float-radius':             c.floatRadius = parseFloat(value) || 0.1; break;
+        case 'float-speed':              c.floatSpeed = parseFloat(value) || 1.0; break;
+        case 'float-variability':        c.floatVariability = parseFloat(value) ?? 0.5; break;
+        case 'voronoi-cells':            c.voronoiCells = parseInt(value, 10) || 12; break;
+        case 'voronoi-membrane-width':   c.voronoiMembraneWidth = parseFloat(value) || 0.05; break;
+        case 'voronoi-speed':            c.voronoiSpeed = parseFloat(value) ?? 0.5; break;
+        case 'voronoi-variability':      c.voronoiVariability = parseFloat(value) ?? 0.5; break;
       }
     }
 
@@ -779,8 +895,14 @@
     // ── Animation ───────────────────────────────────────────────────
 
     _regenerate() {
-      this._points = generatePoints(this._config);
+      if (this._config.shapeType === 'voronoi') {
+        this._voronoiSamples = initVoronoiSamples(this._config.density);
+        this._points = generateVoronoiPoints(this._voronoiSamples, this._config, 0);
+      } else {
+        this._points = generatePoints(this._config);
+      }
       this._config.connectionData = generateConnections(this._points, this._config);
+      this._floatPhases = initFloatPhases(this._points.length);
     }
 
     _startAnimation() {
@@ -789,7 +911,30 @@
           this._config.rotY += this._config.rotSpeed;
         }
         if (this._ctx && this._logicalW > 0) {
-          renderFrame(this._ctx, this._logicalW, this._logicalH, this._points, this._config);
+          const t = performance.now() * 0.001;
+          let points;
+          if (this._config.shapeType === 'voronoi') {
+            points = generateVoronoiPoints(this._voronoiSamples, this._config, t);
+          } else if (this._config.float && this._floatPhases.length > 0) {
+            points = applyFloat(this._points, this._floatPhases, this._config, t);
+          } else {
+            points = this._points;
+          }
+
+          const blockSize = this._config.pixelate;
+          if (blockSize > 1) {
+            if (!this._pixelCanvas) this._pixelCanvas = document.createElement('canvas');
+            const pw = Math.max(1, Math.round(this._logicalW / blockSize));
+            const ph = Math.max(1, Math.round(this._logicalH / blockSize));
+            this._pixelCanvas.width = pw;
+            this._pixelCanvas.height = ph;
+            renderFrame(this._pixelCanvas.getContext('2d'), pw, ph, points, this._config);
+            this._ctx.imageSmoothingEnabled = false;
+            this._ctx.drawImage(this._pixelCanvas, 0, 0, this._logicalW, this._logicalH);
+          } else {
+            this._ctx.imageSmoothingEnabled = true;
+            renderFrame(this._ctx, this._logicalW, this._logicalH, points, this._config);
+          }
         }
         this._animId = requestAnimationFrame(tick);
       };
