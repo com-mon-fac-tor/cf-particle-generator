@@ -138,13 +138,6 @@ class ParticleShape extends HTMLElement {
     window.addEventListener('pointermove', this._onPointerMoveBound);
     window.addEventListener('pointerup', this._onPointerUpBound);
 
-    // Scroll-wheel zoom
-    this._canvas.addEventListener('wheel', (e) => {
-      e.preventDefault();
-      const delta = e.deltaY > 0 ? -0.05 : 0.05;
-      this._config.zoom = Math.max(0.2, Math.min(5, (this._config.zoom || 1) + delta));
-    }, { passive: false });
-
     // Generate and start
     this._regenerate();
     this._startAnimation();
