@@ -623,9 +623,7 @@
         : 0.85;
 
       if (connectedSet && !connectedSet.has(p.origIdx)) {
-        const opacityMult = config.nonConnectedOpacity != null ? config.nonConnectedOpacity : 0.4;
-        const dimAlpha = alpha * opacityMult;
-        ctx.fillStyle = `rgba(${ncr},${ncg},${ncb},${dimAlpha})`;
+        ctx.fillStyle = `rgba(${ncr},${ncg},${ncb},${alpha})`;
       } else {
         ctx.fillStyle = `rgba(${cr},${cg},${cb},${alpha})`;
       }
