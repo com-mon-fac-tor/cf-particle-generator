@@ -17,7 +17,7 @@
   </div>
   <div id="controls-wrap">
     <div id="controls-header">
-      <span id="panel-title">Particle Generator<span id="panel-version">v0.2</span></span>
+      <span id="panel-title">Particle Generator<span id="panel-version">v0.3</span></span>
     </div>
   <aside id="controls">
     <div class="section-label"><span class="section-icon" style="-webkit-mask-image: url(./icons/icon.shape.svg); mask-image: url(./icons/icon.shape.svg);"></span>Shape</div>
@@ -428,16 +428,6 @@ window.addEventListener('pointerup', () => {
   state.isDragging = false;
 });
 
-// Scroll-wheel zoom
-canvas.addEventListener('wheel', (e) => {
-  e.preventDefault();
-  const delta = e.deltaY > 0 ? -0.05 : 0.05;
-  state.zoom = Math.max(0.2, Math.min(5, state.zoom + delta));
-  const zoomInput = document.getElementById('zoom');
-  const zoomVal = document.getElementById('zoomVal');
-  zoomInput.value = state.zoom;
-  if (zoomVal) zoomVal.textContent = state.zoom.toFixed(2);
-}, { passive: false });
 
 // ── Animation Loop ─────────────────────────────────────────────────
 
