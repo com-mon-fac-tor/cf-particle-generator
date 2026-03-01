@@ -737,10 +737,7 @@
             display: block;
             width: 100%;
             height: 100%;
-            cursor: grab;
-          }
-          canvas:active {
-            cursor: grabbing;
+            touch-action: pan-y;
           }
         </style>
         <canvas></canvas>
