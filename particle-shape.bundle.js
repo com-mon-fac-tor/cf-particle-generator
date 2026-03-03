@@ -924,6 +924,7 @@
             this._pixelCanvas.height = ph;
             renderFrame(this._pixelCanvas.getContext('2d'), pw, ph, points, this._config);
             this._ctx.imageSmoothingEnabled = false;
+            this._ctx.clearRect(0, 0, this._logicalW, this._logicalH);
             this._ctx.drawImage(this._pixelCanvas, 0, 0, this._logicalW, this._logicalH);
           } else {
             this._ctx.imageSmoothingEnabled = true;

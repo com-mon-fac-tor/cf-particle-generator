@@ -17,7 +17,7 @@
   </div>
   <div id="controls-wrap">
     <div id="controls-header">
-      <span id="panel-title">Particle Generator<span id="panel-version">v0.3</span></span>
+      <span id="panel-title">Particle Generator<span id="panel-version">v0.4</span></span>
     </div>
   <aside id="controls">
     <div class="section-label"><span class="section-icon" style="-webkit-mask-image: url(./icons/icon.shape.svg); mask-image: url(./icons/icon.shape.svg);"></span>Shape</div>
@@ -387,6 +387,7 @@ function render() {
     _pixelCanvas.height = ph;
     renderFrame(_pixelCanvas.getContext('2d'), pw, ph, points, state);
     ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, w, h);
     ctx.drawImage(_pixelCanvas, 0, 0, w, h);
   } else {
     ctx.imageSmoothingEnabled = true;
