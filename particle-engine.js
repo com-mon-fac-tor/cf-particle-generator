@@ -739,9 +739,12 @@ export function projectPoints(points, rotX, rotY, rotZ, perspD, cx, cy, spacing,
 }
 
 export function renderFrame(ctx, w, h, points, config) {
-  ctx.clearRect(0, 0, w, h);
-  if (config.bgColor !== 'transparent') {
-    ctx.fillStyle = config.bgColor || '#0a0a0a';
+  const bg = config.bgColor || '#0a0a0a';
+  if (bg === 'transparent') {
+    ctx.clearRect(0, 0, w, h);
+  } else {
+    if (bg.startsWith('rgba')) ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = bg;
     ctx.fillRect(0, 0, w, h);
   }
 
