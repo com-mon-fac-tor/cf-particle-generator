@@ -273,9 +273,12 @@ class ParticleShape extends HTMLElement {
   }
 
   _startAnimation() {
-    const tick = () => {
+    let _lastTs = 0;
+    const tick = (ts) => {
+      const dt = _lastTs ? Math.min((ts - _lastTs) / (1000 / 60), 4) : 1;
+      _lastTs = ts;
       if (this._config.autoRotate && !this._isDragging) {
-        this._config.rotY += this._config.rotSpeed;
+        this._config.rotY += this._config.rotSpeed * dt;
       }
       if (this._ctx && this._logicalW > 0) {
         const t = performance.now() * 0.001;

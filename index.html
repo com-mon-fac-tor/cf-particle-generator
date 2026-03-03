@@ -440,9 +440,12 @@ window.addEventListener('pointerup', () => {
 
 const _rec = { active: false, startRotY: 0, recorder: null, wasAutoRotate: false };
 
-function animate() {
+let _lastFrameTime = 0;
+function animate(ts) {
+  const dt = _lastFrameTime ? Math.min((ts - _lastFrameTime) / (1000 / 60), 4) : 1;
+  _lastFrameTime = ts;
   if (state.autoRotate && !state.isDragging) {
-    state.rotY += state.rotSpeed;
+    state.rotY += state.rotSpeed * dt;
     if (_rec.active && state.rotY - _rec.startRotY >= 2 * Math.PI) {
       state.rotY = _rec.startRotY; // snap to exact start for seamless loop
       _rec.active = false;
