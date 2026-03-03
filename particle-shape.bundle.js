@@ -524,8 +524,11 @@
   }
 
   function renderFrame(ctx, w, h, points, config) {
-    ctx.fillStyle = config.bgColor || '#0a0a0a';
-    ctx.fillRect(0, 0, w, h);
+    ctx.clearRect(0, 0, w, h);
+    if (config.bgColor !== 'transparent') {
+      ctx.fillStyle = config.bgColor || '#0a0a0a';
+      ctx.fillRect(0, 0, w, h);
+    }
 
     const cx = w / 2;
     const cy = h / 2;
