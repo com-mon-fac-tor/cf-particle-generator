@@ -230,8 +230,6 @@ class ParticleShape extends HTMLElement {
     const rect = this.getBoundingClientRect();
     this._canvas.width = rect.width * dpr;
     this._canvas.height = rect.height * dpr;
-    this._canvas.style.width = rect.width + 'px';
-    this._canvas.style.height = rect.height + 'px';
     this._ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this._logicalW = rect.width;
     this._logicalH = rect.height;
