@@ -286,7 +286,7 @@ export function parseSVGFile(svgText) {
     svgNorm = { centerX, centerY, maxRange };
   }
 
-  return { outline, svgPath2D, svgNorm };
+  return { outline, svgPath2D, svgNorm, pathDatas };
 }
 
 // ── SVG Extrude Generator ──────────────────────────────────────────
