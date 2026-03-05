@@ -222,10 +222,12 @@ class ParticleShape extends HTMLElement {
       case 'voronoi-variability':      c.voronoiVariability = parseFloat(value) ?? 0.5; break;
       case 'svg-data': {
         try {
-          const payload = JSON.parse(atob(value));
-          this._config.svgOutline = payload.pts.map(([x, y]) => ({ x, y }));
-          this._config._svgNorm = { centerX: payload.cx, centerY: payload.cy, maxRange: payload.mr };
-          this._config.svgPath2D = payload.d ? new Path2D(payload.d) : null;
+          const flat = JSON.parse(atob(value)).pts;
+          const outline = [];
+          for (let i = 0; i < flat.length - 1; i += 2) outline.push({ x: flat[i], y: flat[i + 1] });
+          this._config.svgOutline = outline;
+          this._config.svgPath2D = null;
+          this._config._svgNorm = null;
           if (this._config.shapeType === 'svgExtrude') this._regenerate();
         } catch(e) {}
         break;

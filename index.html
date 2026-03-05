@@ -629,10 +629,13 @@ function generateEmbedCode() {
     attrs.push(`extrude-depth="${state.extrudeDepth}"`);
   }
   if (state.shapeType === 'svgExtrude' && state.svgOutline.length > 0) {
-    const pts = state.svgOutline.map(p => [Math.round(p.x * 1000) / 1000, Math.round(p.y * 1000) / 1000]);
-    const norm = state._svgNorm;
-    const payload = { pts, d: state.svgPathDatas.join(' '), cx: norm ? norm.centerX : 0, cy: norm ? norm.centerY : 0, mr: norm ? norm.maxRange : 1 };
-    attrs.push(`svg-data="${btoa(JSON.stringify(payload))}"`);
+    const step = Math.max(1, Math.floor(state.svgOutline.length / 150));
+    const pts = [];
+    for (let i = 0; i < state.svgOutline.length; i += step) {
+      pts.push(Math.round(state.svgOutline[i].x * 100) / 100);
+      pts.push(Math.round(state.svgOutline[i].y * 100) / 100);
+    }
+    attrs.push(`svg-data="${btoa(JSON.stringify({ pts }))}"`);
   }
   if (state.snapToGrid) attrs.push('snap-to-grid');
   if (state.shapeType === 'voronoi') {
